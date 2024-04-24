@@ -41,7 +41,7 @@ export const createPersistenceHandler = <TAGGREGATE, TEVENT extends BaseEvent>(d
           snapshot.lastConsideredEvent,
           snapshot.schemaVersion,
           JSON.stringify(snapshot.state)
-        );
+        ).run();
 
         return { success: true, data: null }
       } catch (error) {
@@ -54,18 +54,24 @@ export const createPersistenceHandler = <TAGGREGATE, TEVENT extends BaseEvent>(d
 
       const getSnapshot = d1.prepare(`SELECT name, last_considered_event_id, version, snapshot FROM ${tables.projections} WHERE name = ?1 ORDER BY ID DESC LIMIT 1`)
       const getEventsFromSnapshot = d1.prepare(`
-        WITH latest_projection AS (
-            SELECT *
+          WITH FilteredEntry AS (
+            SELECT last_considered_event_id
             FROM ${tables.projections}
-            WHERE name = '${searchOn}'
+            WHERE name = ?1
             ORDER BY ID DESC
             LIMIT 1
+        ), 
+
+        LastProcessedId AS (
+          SELECT ID
+          FROM ${tables.events}
+          WHERE event_id = (SELECT last_considered_event_id FROM FilteredEntry)
+          LIMIT 1
         )
 
-        SELECT e.*
-        FROM ${tables.events} e
-        LEFT JOIN latest_projection lp ON e.event_id = lp.last_considered_event_id
-        WHERE e.ID > lp.ID;
+        SELECT *
+        FROM ${tables.events}
+        WHERE ID > IFNULL((SELECT ID FROM LastProcessedId), 0);
       `)
 
       try {
@@ -74,9 +80,19 @@ export const createPersistenceHandler = <TAGGREGATE, TEVENT extends BaseEvent>(d
           getEventsFromSnapshot.bind(searchOn)
         ]);
 
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        //@ts-ignore
-        return { success: true, data: { id: searchOn, snapshot: response[0].results, events: response[1].results.map(e => e.event) } } as EventStoreResult<PersistedProjection<TAGGREGATE, TEVENT>>
+        const parseSnapshot = (response: any) => ({
+          ...response,
+          snapshot: response.snapshot ? JSON.parse(response.snapshot) : null
+        })
+
+        return {
+          success: true,
+          data: {
+            id: searchOn,
+            snapshot: response[0].results[0] !== undefined ? parseSnapshot(response[0].results[0]) : null,
+            events: (response[1].results as { event: string }[]).map(e => JSON.parse(e.event)) as readonly LittleEsEvent<TEVENT>[]
+          }
+        } as unknown as EventStoreResult<PersistedProjection<TAGGREGATE, TEVENT>>
       } catch (error) {
         return { success: false, at: "Persistance", error: error ? error.message : "Unknown persistance error." } as EventStoreResult<PersistedProjection<TAGGREGATE, TEVENT>>
       }
@@ -88,7 +104,11 @@ export const createPersistenceHandler = <TAGGREGATE, TEVENT extends BaseEvent>(d
 
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         //@ts-ignore
-        return { success: true, data: result.result.map(e => e.event) as unknown as readonly LittleEsEvent<TEVENT>[] }
+        if (!result.success) return { success: false, at: "Persistance", error: result.error.message }
+
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        //@ts-ignore
+        return { success: true, data: result.results.map(e => JSON.parse(e.event)) as unknown as readonly LittleEsEvent<TEVENT>[] }
       } catch (error) {
         return { success: false, at: "Persistance", error: error ? error.message : "Unknown persistance error." }
       }
