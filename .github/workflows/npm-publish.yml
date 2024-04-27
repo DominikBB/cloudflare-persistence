@@ -31,6 +31,6 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - run: npm install -g pnpm
       - run: pnpm install
-      - run: pnpm publish --filter little-es-cloudflare-persistence
+      - run: pnpm publish --filter little-es-cloudflare-persistence --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
