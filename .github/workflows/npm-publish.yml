@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: 20
       - run: npm install -g pnpm
-      - run: pnpm install
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm run test
 
   publish-npm:
@@ -30,7 +30,7 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org/
       - run: npm install -g pnpm
-      - run: pnpm install
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm run build --filter=little-es-cloudflare-persistence
       - run: pnpm publish --filter little-es-cloudflare-persistence --no-git-checks
         env:
