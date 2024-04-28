@@ -31,7 +31,7 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - run: npm install -g pnpm
       - run: pnpm install --no-frozen-lockfile
-      - run: pnpm run build --filter=little-es-cloudflare-persistence
+      - run: cd little-es-cloudflare-persistence/ && pnpm run build
       - run: pnpm publish --filter little-es-cloudflare-persistence --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
